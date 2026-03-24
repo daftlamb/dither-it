@@ -135,14 +135,14 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         <button class="algo-btn" data-algo="none">None</button>
         <button class="algo-btn" data-algo="custom">Custom ✏</button>
       </div>
-    </div>
-    <div class="ps" id="custom-pattern-ps" style="display:none">
-      <div class="sl">Custom Pattern <span style="font-size:9px;font-weight:400;color:var(--muted)">8&#215;8 · click to paint</span></div>
-      <canvas id="pattern-canvas" width="8" height="8" style="width:160px;height:160px;image-rendering:pixelated;border:1.5px solid var(--border);border-radius:6px;cursor:crosshair;display:block;margin-bottom:8px"></canvas>
-      <div style="display:flex;gap:6px">
-        <button class="btn-add-color" id="btn-pat-clear" style="flex:1">Clear</button>
-        <button class="btn-add-color" id="btn-pat-fill" style="flex:1">Fill</button>
-        <button class="btn-add-color" id="btn-pat-inv" style="flex:1">Invert</button>
+      <div id="custom-pattern-ps" style="display:none;margin-top:10px">
+        <div class="sl">Pattern <span style="font-size:9px;font-weight:400;color:var(--muted)">8&#215;8 · click to paint</span></div>
+        <canvas id="pattern-canvas" width="8" height="8" style="width:144px;height:144px;image-rendering:pixelated;border:1.5px solid var(--border);border-radius:6px;cursor:crosshair;display:block;margin-bottom:8px"></canvas>
+        <div style="display:flex;gap:6px">
+          <button class="btn-add-color" id="btn-pat-clear" style="flex:1">Clear</button>
+          <button class="btn-add-color" id="btn-pat-fill" style="flex:1">Fill</button>
+          <button class="btn-add-color" id="btn-pat-inv" style="flex:1">Invert</button>
+        </div>
       </div>
     </div>
     <div class="ps">
