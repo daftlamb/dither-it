@@ -609,18 +609,35 @@ function dl(url,name){var a=document.createElement('a');a.href=url;a.download=na
 document.getElementById('btn-export-png').addEventListener('click',function(){
   if(!S.result)return;
   var W=S.result.width,H=S.result.height;
-  var hasCaption=S.captionText||S.captionSub;
-  var lineH=Math.round(S.captionSize*1.4);
-  var captionH=hasCaption?(S.captionSize*0.6+lineH*(S.captionText?1:0)+lineH*(S.captionSub?1:0)+S.captionSize*0.6):0;
-  var c=document.createElement('canvas');c.width=W;c.height=H+Math.round(captionH);
+  var hasCaption=!!(S.captionText||S.captionSub);
+  var fontSize=S.captionSize||18;
+  var lineH=Math.round(fontSize*1.5);
+  var lines=(S.captionText?1:0)+(S.captionSub?1:0);
+  var captionH=hasCaption?Math.round(fontSize*0.5+lineH*lines+fontSize*0.5):0;
+  var totalH=H+captionH;
+  var c=document.createElement('canvas');c.width=W;c.height=totalH;
   var ctx=c.getContext('2d');
-  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H+Math.round(captionH));
+  // Fill entire canvas white first
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,totalH);
+  // Draw dithered image (putImageData only covers H rows)
   ctx.putImageData(S.result,0,0);
+  // Draw caption below image
   if(hasCaption){
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=S.captionColor;
-    var y=H+S.captionSize*0.8;
-    if(S.captionText){ctx.font='400 '+S.captionSize+'px "Outfit","Noto Sans SC",sans-serif';ctx.fillText(S.captionText,W/2,y);y+=lineH;}
-    if(S.captionSub){ctx.font='300 '+Math.round(S.captionSize*0.75)+'px "Outfit","Noto Sans SC",sans-serif';ctx.globalAlpha=0.65;ctx.fillText(S.captionSub,W/2,y);ctx.globalAlpha=1;}
+    ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    ctx.fillStyle=S.captionColor||'#1a1a1a';
+    var y=H+Math.round(fontSize*1.0);
+    if(S.captionText){
+      ctx.globalAlpha=1;
+      ctx.font='400 '+fontSize+'px sans-serif';
+      ctx.fillText(S.captionText,W/2,y);
+      y+=lineH;
+    }
+    if(S.captionSub){
+      ctx.globalAlpha=0.6;
+      ctx.font='300 '+Math.round(fontSize*0.75)+'px sans-serif';
+      ctx.fillText(S.captionSub,W/2,y);
+      ctx.globalAlpha=1;
+    }
   }
   dl(c.toDataURL('image/png'),'ditherit.png');
 });
