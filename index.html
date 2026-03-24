@@ -167,6 +167,20 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <div class="sl-row" id="spread-row"><div class="sl-lbl">Spread</div><div class="sl-trk"><input type="range" id="sl-spread" min="0.5" max="1.5" value="1.0" step="0.05"></div><div class="sl-val" id="val-spread">1.0</div></div>
     </div>
     <div class="ps">
+      <div class="sl">Caption</div>
+      <input type="text" id="caption-text" placeholder="Title…" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;background:transparent;color:var(--text);font-family:inherit;font-size:12px;margin-bottom:6px;outline:none;box-sizing:border-box">
+      <input type="text" id="caption-sub" placeholder="Subtitle (optional)…" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;background:transparent;color:var(--text);font-family:inherit;font-size:12px;margin-bottom:6px;outline:none;box-sizing:border-box">
+      <div class="sl-row" style="margin-bottom:6px">
+        <div class="sl-lbl">Size</div>
+        <div class="sl-trk"><input type="range" id="caption-size" min="10" max="48" value="18" step="1"></div>
+        <div class="sl-val" id="val-caption-size">18</div>
+      </div>
+      <div class="sl-row">
+        <div class="sl-lbl">Color</div>
+        <input type="color" id="caption-color" value="#1a1a1a" style="width:28px;height:28px;border:1.5px solid var(--border);border-radius:4px;cursor:pointer;padding:0;background:none">
+      </div>
+    </div>
+    <div class="ps">
       <div class="sl">Export</div>
       <button class="exp-btn primary" id="btn-export-png">&#8595; Export PNG <span class="exp-tag free">free</span></button>
       <button class="exp-btn" id="btn-export-svg">&#11041; Export SVG <span class="exp-tag">&#9749;</span></button>
@@ -237,7 +251,8 @@ const RISO_COLORS=[
 ];
 const S={srcImg:null,result:null,algo:'floyd',colorMode:'bw',grayLevels:4,
   customPalette:['#000000','#ffffff'],risoSel:[],pixelSize:1,contrast:0,
-  brightness:0,spread:1.0,zoom:'fit',compareMode:false,splitFrac:0.5,pendingExport:null};
+  brightness:0,spread:1.0,zoom:'fit',compareMode:false,splitFrac:0.5,pendingExport:null,
+  captionText:'',captionSub:'',captionSize:18,captionColor:'#1a1a1a'};
 const WK_SRC=`
 'use strict';
 function hexToRgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -455,6 +470,10 @@ bindSl('sl-pixel','val-pixel','pixelSize');
 bindSl('sl-contrast','val-contrast','contrast');
 bindSl('sl-brightness','val-brightness','brightness');
 bindSl('sl-spread','val-spread','spread',function(v){return v.toFixed(2);});
+document.getElementById('caption-text').addEventListener('input',function(){S.captionText=this.value;});
+document.getElementById('caption-sub').addEventListener('input',function(){S.captionSub=this.value;});
+document.getElementById('caption-size').addEventListener('input',function(){S.captionSize=parseInt(this.value);document.getElementById('val-caption-size').textContent=this.value;});
+document.getElementById('caption-color').addEventListener('input',function(){S.captionColor=this.value;});
 
 function loadFile(file){
   if(!file||!file.type.match(/^image\/(jpeg|png|webp)$/))return;
@@ -589,8 +608,21 @@ function dl(url,name){var a=document.createElement('a');a.href=url;a.download=na
 
 document.getElementById('btn-export-png').addEventListener('click',function(){
   if(!S.result)return;
-  var c=document.createElement('canvas');c.width=S.result.width;c.height=S.result.height;
-  c.getContext('2d').putImageData(S.result,0,0);dl(c.toDataURL('image/png'),'ditherit.png');
+  var W=S.result.width,H=S.result.height;
+  var hasCaption=S.captionText||S.captionSub;
+  var lineH=Math.round(S.captionSize*1.4);
+  var captionH=hasCaption?(S.captionSize*0.6+lineH*(S.captionText?1:0)+lineH*(S.captionSub?1:0)+S.captionSize*0.6):0;
+  var c=document.createElement('canvas');c.width=W;c.height=H+Math.round(captionH);
+  var ctx=c.getContext('2d');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H+Math.round(captionH));
+  ctx.putImageData(S.result,0,0);
+  if(hasCaption){
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=S.captionColor;
+    var y=H+S.captionSize*0.8;
+    if(S.captionText){ctx.font='400 '+S.captionSize+'px "Outfit","Noto Sans SC",sans-serif';ctx.fillText(S.captionText,W/2,y);y+=lineH;}
+    if(S.captionSub){ctx.font='300 '+Math.round(S.captionSize*0.75)+'px "Outfit","Noto Sans SC",sans-serif';ctx.globalAlpha=0.65;ctx.fillText(S.captionSub,W/2,y);ctx.globalAlpha=1;}
+  }
+  dl(c.toDataURL('image/png'),'ditherit.png');
 });
 document.getElementById('btn-export-svg').addEventListener('click',function(){if(!S.result)return;showModal(doSVG);});
 function doSVG(){
