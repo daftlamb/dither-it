@@ -132,7 +132,17 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         <button class="algo-btn" data-algo="atkinson">Atkinson</button>
         <button class="algo-btn" data-algo="bayer4">Bayer 4&times;4</button>
         <button class="algo-btn" data-algo="bayer8">Bayer 8&times;8</button>
-        <button class="algo-btn" data-algo="none" style="grid-column:span 2">None (posterize)</button>
+        <button class="algo-btn" data-algo="none">None</button>
+        <button class="algo-btn" data-algo="custom">Custom ✏</button>
+      </div>
+    </div>
+    <div class="ps" id="custom-pattern-ps" style="display:none">
+      <div class="sl">Custom Pattern <span style="font-size:9px;font-weight:400;color:var(--muted)">8&#215;8 · click to paint</span></div>
+      <canvas id="pattern-canvas" width="8" height="8" style="width:160px;height:160px;image-rendering:pixelated;border:1.5px solid var(--border);border-radius:6px;cursor:crosshair;display:block;margin-bottom:8px"></canvas>
+      <div style="display:flex;gap:6px">
+        <button class="btn-add-color" id="btn-pat-clear" style="flex:1">Clear</button>
+        <button class="btn-add-color" id="btn-pat-fill" style="flex:1">Fill</button>
+        <button class="btn-add-color" id="btn-pat-inv" style="flex:1">Invert</button>
       </div>
     </div>
     <div class="ps">
@@ -239,6 +249,7 @@ const RISO_COLORS=[
 const S={srcImg:null,result:null,algo:'floyd',colorMode:'bw',grayLevels:4,
   customPalette:['#000000','#ffffff'],risoSel:[],pixelSize:1,contrast:0,
   brightness:0,spread:1.0,zoom:'fit',compareMode:false,splitFrac:0.5,pendingExport:null};
+var customPattern=new Uint8Array(64); // 8x8 grid, 0=off 1=on
 const WK_SRC=`
 'use strict';
 function hexToRgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -263,8 +274,13 @@ function nearest(r,g,b,pal){
 var B4=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 var B8=[0,32,8,40,2,34,10,42,48,16,56,24,50,18,58,26,12,44,4,36,14,46,6,38,60,28,52,20,62,30,54,22,3,35,11,43,1,33,9,41,51,19,59,27,49,17,57,25,15,47,7,39,13,45,5,37,63,31,55,23,61,29,53,21];
 function doDither(buf,w,h,algo,pal,spread){
-  if(algo==='bayer4'||algo==='bayer8'){
-    var mat=algo==='bayer4'?B4:B8,sz=algo==='bayer4'?4:8,lv=mat.length;
+  if(algo==='bayer4'||algo==='bayer8'||algo==='custom'){
+    var mat,sz,lv;
+    if(algo==='custom'&&d.customPattern&&d.customPattern.length===64){
+      mat=d.customPattern;sz=8;lv=64;
+    } else {
+      mat=algo==='bayer4'?B4:B8;sz=algo==='bayer4'?4:8;lv=mat.length;
+    }
     for(var y=0;y<h;y++){for(var x=0;x<w;x++){
       var ii=(y*w+x)*4,t=mat[(y%sz)*sz+(x%sz)]/lv-0.5;
       var r=Math.round(clamp(buf[ii]+t*255,0,255)),g=Math.round(clamp(buf[ii+1]+t*255,0,255)),b=Math.round(clamp(buf[ii+2]+t*255,0,255));
@@ -426,6 +442,7 @@ document.querySelectorAll('.algo-btn').forEach(function(btn){
     document.querySelectorAll('.algo-btn').forEach(function(b){b.classList.remove('active');});
     btn.classList.add('active');S.algo=btn.dataset.algo;
     document.getElementById('spread-row').style.display=(S.algo==='floyd'||S.algo==='atkinson')?'flex':'none';
+    document.getElementById('custom-pattern-ps').style.display=(S.algo==='custom')?'block':'none';
     scheduleRender();
   });
 });
@@ -456,6 +473,42 @@ bindSl('sl-pixel','val-pixel','pixelSize');
 bindSl('sl-contrast','val-contrast','contrast');
 bindSl('sl-brightness','val-brightness','brightness');
 bindSl('sl-spread','val-spread','spread',function(v){return v.toFixed(2);});
+
+// Custom pattern editor
+(function(){
+  var pc=document.getElementById('pattern-canvas');
+  var ctx=pc.getContext('2d');
+  var painting=false,paintVal=1;
+  function redraw(){
+    for(var i=0;i<64;i++){
+      ctx.fillStyle=customPattern[i]?'#1a1a1a':'#f0f0f0';
+      ctx.fillRect(i%8,Math.floor(i/8),1,1);
+    }
+  }
+  function cellIdx(e,el){
+    var r=el.getBoundingClientRect();
+    var x=Math.floor((e.clientX-r.left)/r.width*8);
+    var y=Math.floor((e.clientY-r.top)/r.height*8);
+    return Math.max(0,Math.min(7,y))*8+Math.max(0,Math.min(7,x));
+  }
+  pc.addEventListener('mousedown',function(e){
+    painting=true;
+    var idx=cellIdx(e,pc);paintVal=customPattern[idx]?0:1;
+    customPattern[idx]=paintVal;redraw();scheduleRender();
+  });
+  pc.addEventListener('mousemove',function(e){
+    if(!painting)return;
+    customPattern[cellIdx(e,pc)]=paintVal;redraw();scheduleRender();
+  });
+  window.addEventListener('mouseup',function(){painting=false;});
+  document.getElementById('btn-pat-clear').addEventListener('click',function(){customPattern.fill(0);redraw();scheduleRender();});
+  document.getElementById('btn-pat-fill').addEventListener('click',function(){customPattern.fill(1);redraw();scheduleRender();});
+  document.getElementById('btn-pat-inv').addEventListener('click',function(){
+    for(var i=0;i<64;i++)customPattern[i]=customPattern[i]?0:1;
+    redraw();scheduleRender();
+  });
+  redraw();
+})();
 
 function loadFile(file){
   if(!file||!file.type.match(/^image\/(jpeg|png|webp)$/))return;
@@ -512,7 +565,8 @@ function doRender(){
     rendering=false;if(pendingRender){pendingRender=false;doRender();}
   };
   wk.postMessage({pixels:buf,width:w,height:h,algo:S.algo,colorMode:S.colorMode,grayLevels:S.grayLevels,
-    palette:pal,pixelSize:S.pixelSize,contrast:S.contrast,brightness:S.brightness,spread:S.spread},[buf]);
+    palette:pal,pixelSize:S.pixelSize,contrast:S.contrast,brightness:S.brightness,spread:S.spread,
+    customPattern:S.algo==='custom'?Array.from(customPattern):null},[buf]);
 }
 function drawResult(){
   if(!S.result)return;
