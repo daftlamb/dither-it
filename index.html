@@ -453,6 +453,7 @@ document.querySelectorAll('.algo-btn').forEach(function(btn){
     btn.classList.add('active');S.algo=btn.dataset.algo;
     document.getElementById('spread-row').style.display=(S.algo==='floyd'||S.algo==='atkinson')?'flex':'none';
     document.getElementById('custom-pattern-ps').style.display=(S.algo==='custom')?'block':'none';
+    if(S.algo==='custom'){resetWorker();rendering=false;pendingRender=false;}
     scheduleRender();
   });
 });
