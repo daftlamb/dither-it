@@ -376,24 +376,28 @@ RISO_COLORS.forEach(function(rc,i){
 
 function updateRisoThumbs(){
   if(!S.result)return;
-  RISO_COLORS.forEach(function(rc,i){
-    var tc=risoThumbCanvases[i];if(!tc)return;
-    var tw=36,th=36,tctx=tc.getContext('2d');
-    var src=S.result;var sw=src.width,sh=src.height;
-    var scale=Math.min(tw/sw,th/sh);var dw=Math.round(sw*scale),dh=Math.round(sh*scale);
-    var dx=Math.round((tw-dw)/2),dy=Math.round((th-dh)/2);
-    tctx.fillStyle='#fff';tctx.fillRect(0,0,tw,th);
-    var rgb=h2rgb(rc.hex);
-    var tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
-    var tmpctx=tmp.getContext('2d');tmpctx.drawImage(src,0,0);
-    var id=tmpctx.getImageData(0,0,sw,sh),d=id.data;
-    for(var p=0;p<d.length;p+=4){
-      var gray=0.299*d[p]+0.587*d[p+1]+0.114*d[p+2];var t=gray/255;
-      d[p]=Math.round(rgb[0]*t+(1-t)*255);d[p+1]=Math.round(rgb[1]*t+(1-t)*255);d[p+2]=Math.round(rgb[2]*t+(1-t)*255);
-    }
-    tmpctx.putImageData(id,0,0);
-    tctx.drawImage(tmp,dx,dy,dw,dh);
-  });
+  try{
+    var srcCv=document.createElement('canvas');srcCv.width=S.result.width;srcCv.height=S.result.height;
+    srcCv.getContext('2d').putImageData(S.result,0,0);
+    RISO_COLORS.forEach(function(rc,idx2){
+      var tc=risoThumbCanvases[idx2];if(!tc)return;
+      var tw=36,th=36,tctx=tc.getContext('2d');
+      var sw=srcCv.width,sh=srcCv.height;
+      var scale=Math.min(tw/sw,th/sh),dw=Math.round(sw*scale),dh=Math.round(sh*scale);
+      var dx=Math.round((tw-dw)/2),dy=Math.round((th-dh)/2);
+      tctx.fillStyle='#fff';tctx.fillRect(0,0,tw,th);
+      var rgb=h2rgb(rc.hex);
+      var tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
+      var tmpctx=tmp.getContext('2d');tmpctx.drawImage(srcCv,0,0);
+      var imgd=tmpctx.getImageData(0,0,sw,sh),dd=imgd.data;
+      for(var p=0;p<dd.length;p+=4){
+        var gray=0.299*dd[p]+0.587*dd[p+1]+0.114*dd[p+2];var tt=gray/255;
+        dd[p]=Math.round(rgb[0]*tt+(1-tt)*255);dd[p+1]=Math.round(rgb[1]*tt+(1-tt)*255);dd[p+2]=Math.round(rgb[2]*tt+(1-tt)*255);
+      }
+      tmpctx.putImageData(imgd,0,0);
+      tctx.drawImage(tmp,dx,dy,dw,dh);
+    });
+  }catch(e){console.warn('riso thumb error',e);}
 }
 
 function renderPalette(){
