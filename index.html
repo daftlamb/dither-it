@@ -253,8 +253,8 @@ const RISO_COLORS=[
 const S={srcImg:null,result:null,algo:'floyd',colorMode:'bw',grayLevels:4,
   customPalette:['#000000','#ffffff'],risoSel:[],pixelSize:1,contrast:0,
   brightness:0,spread:1.0,zoom:'fit',compareMode:false,splitFrac:0.5,pendingExport:null,
-  customPattern:new Uint8Array(64), // 8x8 bayer-style pattern, 0=light 1=dark
   captionText:'',captionSub:'',captionSize:18,captionColor:'#1a1a1a'};
+S.customPattern = new Uint8Array(64);
 const WK_SRC=`
 'use strict';
 function hexToRgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -278,12 +278,12 @@ function nearest(r,g,b,pal){
 }
 var B4=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 var B8=[0,32,8,40,2,34,10,42,48,16,56,24,50,18,58,26,12,44,4,36,14,46,6,38,60,28,52,20,62,30,54,22,3,35,11,43,1,33,9,41,51,19,59,27,49,17,57,25,15,47,7,39,13,45,5,37,63,31,55,23,61,29,53,21];
-function doDither(buf,w,h,algo,pal,spread){
+function doDither(buf,w,h,algo,pal,spread,customPattern){
   if(algo==='bayer4'||algo==='bayer8'||algo==='custom'){
     var mat,sz,lv;
-    if(algo==='custom'&&d.customPattern&&d.customPattern.length===64){
+    if(algo==='custom'&&customPattern&&customPattern.length===64){
       // User pattern: values 0/1, convert to threshold offsets like bayer
-      mat=d.customPattern;sz=8;lv=64;
+      mat=customPattern;sz=8;lv=64;
     } else {
       mat=algo==='bayer4'?B4:B8;sz=algo==='bayer4'?4:8;lv=mat.length;
     }
@@ -325,7 +325,7 @@ self.onmessage=function(e){
     var si=(sy*sw+sx)*4;small[si]=r/cnt;small[si+1]=g/cnt;small[si+2]=b/cnt;small[si+3]=255;
   }}
   var pal=buildPal(d.colorMode,d.grayLevels,d.palette);
-  doDither(small,sw,sh,d.algo,pal,d.spread);
+  doDither(small,sw,sh,d.algo,pal,d.spread,d.customPattern);
   var out=new Uint8ClampedArray(w*h*4);
   for(var y=0;y<h;y++){for(var x=0;x<w;x++){
     var sx=Math.min(Math.floor(x/ps),sw-1),sy=Math.min(Math.floor(y/ps),sh-1);
