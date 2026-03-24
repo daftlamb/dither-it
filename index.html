@@ -668,7 +668,6 @@ document.addEventListener('touchmove',function(e){
 document.addEventListener('touchend',function(){dragging=false;});
 
 // Support me modal (coffee/QR) — opens via header coffee button only, ESC/X to close
-var modalBackdrop=document.getElementById('modal-backdrop');
 function openSupportModal(){modalBackdrop.classList.add('open');}
 function closeSupportModal(){modalBackdrop.classList.remove('open');}
 document.getElementById('modal-close').addEventListener('click',closeSupportModal);
