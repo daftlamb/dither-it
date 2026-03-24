@@ -167,6 +167,21 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
       <div class="sl-row" id="spread-row"><div class="sl-lbl">Spread</div><div class="sl-trk"><input type="range" id="sl-spread" min="0.5" max="1.5" value="1.0" step="0.05"></div><div class="sl-val" id="val-spread">1.0</div></div>
     </div>
     <div class="ps">
+      <div class="sl">Caption</div>
+      <input type="text" id="caption-text" placeholder="Title…" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;background:transparent;color:var(--text);font-family:inherit;font-size:12px;margin-bottom:6px;outline:none">
+      <input type="text" id="caption-sub" placeholder="Subtitle (optional)…" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;background:transparent;color:var(--text);font-family:inherit;font-size:12px;margin-bottom:6px;outline:none">
+      <div class="sl-row" style="margin-bottom:6px">
+        <div class="sl-lbl">Size</div>
+        <div class="sl-trk"><input type="range" id="caption-size" min="10" max="48" value="18" step="1"></div>
+        <div class="sl-val" id="val-caption-size">18</div>
+      </div>
+      <div class="sl-row">
+        <div class="sl-lbl">Color</div>
+        <input type="color" id="caption-color" value="#1a1a1a" style="width:28px;height:28px;border:1.5px solid var(--border);border-radius:4px;cursor:pointer;padding:0;background:none">
+      </div>
+    </div>
+
+    <div class="ps">
       <div class="sl">Export</div>
       <button class="exp-btn primary" id="btn-export-png">&#8595; Export PNG <span class="exp-tag free">free</span></button>
       <button class="exp-btn" id="btn-export-svg">&#11041; Export SVG <span class="exp-tag">&#9749;</span></button>
@@ -237,7 +252,9 @@ const RISO_COLORS=[
 ];
 const S={srcImg:null,result:null,algo:'floyd',colorMode:'bw',grayLevels:4,
   customPalette:['#000000','#ffffff'],risoSel:[],pixelSize:1,contrast:0,
-  brightness:0,spread:1.0,zoom:'fit',compareMode:false,splitFrac:0.5,pendingExport:null};
+  brightness:0,spread:1.0,zoom:'fit',compareMode:false,splitFrac:0.5,pendingExport:null,
+  customPattern:new Uint8Array(64), // 8x8 bayer-style pattern, 0=light 1=dark
+  captionText:'',captionSub:'',captionSize:18,captionColor:'#1a1a1a'};
 const WK_SRC=`
 'use strict';
 function hexToRgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -262,10 +279,16 @@ function nearest(r,g,b,pal){
 var B4=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 var B8=[0,32,8,40,2,34,10,42,48,16,56,24,50,18,58,26,12,44,4,36,14,46,6,38,60,28,52,20,62,30,54,22,3,35,11,43,1,33,9,41,51,19,59,27,49,17,57,25,15,47,7,39,13,45,5,37,63,31,55,23,61,29,53,21];
 function doDither(buf,w,h,algo,pal,spread){
-  if(algo==='bayer4'||algo==='bayer8'){
-    var mat=algo==='bayer4'?B4:B8,sz=algo==='bayer4'?4:8,lv=mat.length;
+  if(algo==='bayer4'||algo==='bayer8'||algo==='custom'){
+    var mat,sz,lv;
+    if(algo==='custom'&&d.customPattern&&d.customPattern.length===64){
+      // User pattern: values 0/1, convert to threshold offsets like bayer
+      mat=d.customPattern;sz=8;lv=64;
+    } else {
+      mat=algo==='bayer4'?B4:B8;sz=algo==='bayer4'?4:8;lv=mat.length;
+    }
     for(var y=0;y<h;y++){for(var x=0;x<w;x++){
-      var ii=(y*w+x)*4,t=mat[(y%sz)*sz+(x%sz)]/lv-0.5;
+      var ii=(y*w+x)*4,t=(mat[(y%sz)*sz+(x%sz)]/lv)-0.5;
       var r=Math.round(clamp(buf[ii]+t*255,0,255)),g=Math.round(clamp(buf[ii+1]+t*255,0,255)),b=Math.round(clamp(buf[ii+2]+t*255,0,255));
       var ci=nearest(r,g,b,pal);buf[ii]=pal[ci][0];buf[ii+1]=pal[ci][1];buf[ii+2]=pal[ci][2];
     }}return;
@@ -425,6 +448,7 @@ document.querySelectorAll('.algo-btn').forEach(function(btn){
     document.querySelectorAll('.algo-btn').forEach(function(b){b.classList.remove('active');});
     btn.classList.add('active');S.algo=btn.dataset.algo;
     document.getElementById('spread-row').style.display=(S.algo==='floyd'||S.algo==='atkinson')?'flex':'none';
+    document.getElementById('custom-pattern-section').style.display=(S.algo==='custom')?'block':'none';
     scheduleRender();
   });
 });
@@ -456,8 +480,55 @@ bindSl('sl-contrast','val-contrast','contrast');
 bindSl('sl-brightness','val-brightness','brightness');
 bindSl('sl-spread','val-spread','spread',function(v){return v.toFixed(2);});
 
+// ── Custom pattern editor ──────────────────────────────────
+(function(){
+  var pc=document.getElementById('pattern-canvas');
+  var ctx=pc.getContext('2d');
+  var isDrawing=false,drawVal=1;
+
+  function redrawPattern(){
+    ctx.clearRect(0,0,8,8);
+    for(var i=0;i<64;i++){
+      var x=i%8,y=Math.floor(i/8);
+      ctx.fillStyle=S.customPattern[i]?'#1a1a1a':'#f5f5f5';
+      ctx.fillRect(x,y,1,1);
+    }
+  }
+  function getCell(e){
+    var r=pc.getBoundingClientRect();
+    var x=Math.floor((e.clientX-r.left)/r.width*8);
+    var y=Math.floor((e.clientY-r.top)/r.height*8);
+    return Math.max(0,Math.min(7,x))+Math.max(0,Math.min(7,y))*8;
+  }
+  pc.addEventListener('mousedown',function(e){
+    isDrawing=true;
+    var idx=getCell(e);drawVal=S.customPattern[idx]?0:1;
+    S.customPattern[idx]=drawVal;redrawPattern();scheduleRender();
+  });
+  pc.addEventListener('mousemove',function(e){
+    if(!isDrawing)return;
+    S.customPattern[getCell(e)]=drawVal;redrawPattern();scheduleRender();
+  });
+  window.addEventListener('mouseup',function(){isDrawing=false;});
+  // Touch support
+  pc.addEventListener('touchstart',function(e){e.preventDefault();isDrawing=true;var t=e.touches[0];var idx=getCell(t);drawVal=S.customPattern[idx]?0:1;S.customPattern[idx]=drawVal;redrawPattern();scheduleRender();},{passive:false});
+  pc.addEventListener('touchmove',function(e){e.preventDefault();if(!isDrawing)return;S.customPattern[getCell(e.touches[0])]=drawVal;redrawPattern();scheduleRender();},{passive:false});
+
+  document.getElementById('btn-pattern-clear').addEventListener('click',function(){S.customPattern.fill(0);redrawPattern();scheduleRender();});
+  document.getElementById('btn-pattern-fill').addEventListener('click',function(){S.customPattern.fill(1);redrawPattern();scheduleRender();});
+  document.getElementById('btn-pattern-invert').addEventListener('click',function(){for(var i=0;i<64;i++)S.customPattern[i]=S.customPattern[i]?0:1;redrawPattern();scheduleRender();});
+  redrawPattern();
+})();
+
+// ── Caption bindings ──────────────────────────────────────
+document.getElementById('caption-text').addEventListener('input',function(){S.captionText=this.value;});
+document.getElementById('caption-sub').addEventListener('input',function(){S.captionSub=this.value;});
+document.getElementById('caption-size').addEventListener('input',function(){
+  S.captionSize=parseInt(this.value);document.getElementById('val-caption-size').textContent=this.value;
+});
+document.getElementById('caption-color').addEventListener('input',function(){S.captionColor=this.value;});
+
 function loadFile(file){
-  if(!file||!file.type.match(/^image\/(jpeg|png|webp)$/))return;
   var rd=new FileReader();
   rd.onload=function(e){var img=new Image();img.onload=function(){ingestImage(img);};img.src=e.target.result;};
   rd.readAsDataURL(file);
@@ -511,7 +582,8 @@ function doRender(){
     rendering=false;if(pendingRender){pendingRender=false;doRender();}
   };
   wk.postMessage({pixels:buf,width:w,height:h,algo:S.algo,colorMode:S.colorMode,grayLevels:S.grayLevels,
-    palette:pal,pixelSize:S.pixelSize,contrast:S.contrast,brightness:S.brightness,spread:S.spread},[buf]);
+    palette:pal,pixelSize:S.pixelSize,contrast:S.contrast,brightness:S.brightness,spread:S.spread,
+    customPattern:Array.from(S.customPattern)},[buf]);
 }
 function drawResult(){
   if(!S.result)return;
@@ -589,8 +661,31 @@ function dl(url,name){var a=document.createElement('a');a.href=url;a.download=na
 
 document.getElementById('btn-export-png').addEventListener('click',function(){
   if(!S.result)return;
-  var c=document.createElement('canvas');c.width=S.result.width;c.height=S.result.height;
-  c.getContext('2d').putImageData(S.result,0,0);dl(c.toDataURL('image/png'),'ditherit.png');
+  var W=S.result.width,H=S.result.height;
+  var hasCaption=S.captionText||S.captionSub;
+  var fontSize=S.captionSize,lineH=Math.round(fontSize*1.4);
+  var captionH=hasCaption?(lineH*(S.captionText&&S.captionSub?2:1)+fontSize*1.2):0;
+  var c=document.createElement('canvas');c.width=W;c.height=H+captionH;
+  var ctx=c.getContext('2d');
+  // Fill caption area with white (or bg color)
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H+captionH);
+  // Draw dithered image
+  ctx.putImageData(S.result,0,0);
+  // Draw caption
+  if(hasCaption){
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=S.captionColor;
+    var y=H+fontSize*0.8;
+    if(S.captionText){
+      ctx.font='400 '+fontSize+'px "Outfit","Noto Sans SC",sans-serif';
+      ctx.fillText(S.captionText,W/2,y);y+=lineH;
+    }
+    if(S.captionSub){
+      ctx.font='300 '+Math.round(fontSize*0.75)+'px "Outfit","Noto Sans SC",sans-serif';
+      ctx.globalAlpha=0.65;ctx.fillText(S.captionSub,W/2,y);ctx.globalAlpha=1;
+    }
+  }
+  dl(c.toDataURL('image/png'),'ditherit.png');
 });
 document.getElementById('btn-export-svg').addEventListener('click',function(){if(!S.result)return;showModal(doSVG);});
 function doSVG(){
