@@ -14,7 +14,7 @@
 html,body{height:100%;font-family:"Outfit","Noto Sans SC",sans-serif;background:var(--bg);color:var(--text);transition:background .2s,color .2s}
 header{height:48px;background:var(--header);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:100;flex-shrink:0}
 .brand{font-weight:500;font-size:15px;letter-spacing:-.3px}.brand-it{color:var(--accent)}.sep{flex:1}
-.btn-icon{width:32px;height:32px;border:1px solid var(--border);background:transparent;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text);transition:border-color .15s,color .15s}
+.btn-icon{height:28px;min-width:28px;border:1px solid var(--border);background:transparent;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text);transition:border-color .15s,color .15s;padding:0 8px;font-family:inherit}
 .btn-icon:hover{border-color:var(--accent);color:var(--accent)}
 .app{display:flex;height:calc(100vh - 48px);overflow:hidden}
 .panel{width:280px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
@@ -47,6 +47,7 @@ header{height:48px;background:var(--header);border-bottom:1px solid var(--border
 .riso-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}.riso-name{flex:1;color:var(--text)}
 .riso-chk{width:14px;height:14px;border-radius:3px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--accent)}
 .riso-item.selected .riso-chk{border-color:var(--accent)}
+.riso-preview-thumb{width:36px;height:36px;border-radius:4px;border:1px solid var(--border);image-rendering:pixelated;margin-left:auto;flex-shrink:0}
 .sl-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}.sl-row:last-child{margin-bottom:0}
 .sl-lbl{font-size:11px;color:var(--muted);width:58px;flex-shrink:0}.sl-trk{flex:1}
 input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;background:var(--border);outline:none;cursor:pointer}
@@ -104,9 +105,14 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 </head>
 <body>
 <header>
-  <div class="brand">Dither<span class="brand-it">It</span></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="brand">Dither<span class="brand-it">It</span></div>
+    <button class="btn-icon" id="theme-toggle" title="Toggle dark mode" style="font-size:12px;padding:0 6px">◐</button>
+  </div>
+  <span style="font-size:11px;color:var(--muted);margin-left:10px">image dithering tool</span>
   <div class="sep"></div>
-  <button class="btn-icon" id="theme-toggle" title="Toggle theme">&#9680;</button>
+  <button class="btn-icon" id="btn-coffee-hdr" style="color:#e07820;border-color:#e07820;padding:0 10px;font-size:12px">☕ support</button>
+  <button class="btn-icon" id="btn-about">i</button>
 </header>
 <div class="app">
   <div class="panel">
@@ -196,6 +202,16 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
     <div class="progress-bar" id="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
   </div>
 </div>
+<div class="modal-backdrop" id="about-modal-backdrop">
+  <div class="modal">
+    <button class="modal-close" id="about-modal-close">&#10005;</button>
+    <div class="modal-emoji">✦</div>
+    <div class="modal-title">Dither It</div>
+    <div class="modal-desc">Turn photos into dithered artwork using classic algorithms. Export as PNG, SVG, or print-ready Riso/CMYK channel separations.<br><br>Free to use. No signup. No server. Part of the <em>*It</em> tool family.</div>
+    <div class="modal-desc" style="font-size:11px;margin-bottom:0">Also try: <a href="https://badgeitapp.com" style="color:var(--accent);text-decoration:none">Badge It</a> · <a href="https://griditapp.com" style="color:var(--accent);text-decoration:none">Grid It</a></div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal">
     <button class="modal-close" id="modal-close">&#10005;</button>
@@ -330,10 +346,25 @@ themeToggle.addEventListener('click',function(){
   themeToggle.textContent=n==='dark'?'\u25D1':'\u25D0';
 });
 
+// About modal
+var aboutBackdrop=document.getElementById('about-modal-backdrop');
+document.getElementById('btn-about').addEventListener('click',function(){aboutBackdrop.classList.add('open');});
+document.getElementById('about-modal-close').addEventListener('click',function(){aboutBackdrop.classList.remove('open');});
+aboutBackdrop.addEventListener('click',function(e){if(e.target===aboutBackdrop)aboutBackdrop.classList.remove('open');});
+
+// Header coffee button
+document.getElementById('btn-coffee-hdr').addEventListener('click',function(){
+  document.getElementById('modal-backdrop').classList.add('open');
+});
+
 var risoListEl=document.getElementById('riso-list');
+var risoThumbCanvases=[];
 RISO_COLORS.forEach(function(rc,i){
   var el=document.createElement('div');el.className='riso-item';
+  var thumb=document.createElement('canvas');thumb.className='riso-preview-thumb';thumb.width=36;thumb.height=36;
+  risoThumbCanvases.push(thumb);
   el.innerHTML='<div class="riso-dot" style="background:'+rc.hex+'"></div><div class="riso-name">'+rc.name+'</div><div class="riso-chk" id="rchk'+i+'"></div>';
+  el.appendChild(thumb);
   el.addEventListener('click',function(){
     var idx=S.risoSel.indexOf(i);
     if(idx>=0){S.risoSel.splice(idx,1);el.classList.remove('selected');document.getElementById('rchk'+i).textContent='';}
@@ -342,6 +373,28 @@ RISO_COLORS.forEach(function(rc,i){
   });
   risoListEl.appendChild(el);
 });
+
+function updateRisoThumbs(){
+  if(!S.result)return;
+  RISO_COLORS.forEach(function(rc,i){
+    var tc=risoThumbCanvases[i];if(!tc)return;
+    var tw=36,th=36,tctx=tc.getContext('2d');
+    var src=S.result;var sw=src.width,sh=src.height;
+    var scale=Math.min(tw/sw,th/sh);var dw=Math.round(sw*scale),dh=Math.round(sh*scale);
+    var dx=Math.round((tw-dw)/2),dy=Math.round((th-dh)/2);
+    tctx.fillStyle='#fff';tctx.fillRect(0,0,tw,th);
+    var rgb=h2rgb(rc.hex);
+    var tmp=document.createElement('canvas');tmp.width=sw;tmp.height=sh;
+    var tmpctx=tmp.getContext('2d');tmpctx.drawImage(src,0,0);
+    var id=tmpctx.getImageData(0,0,sw,sh),d=id.data;
+    for(var p=0;p<d.length;p+=4){
+      var gray=0.299*d[p]+0.587*d[p+1]+0.114*d[p+2];var t=gray/255;
+      d[p]=Math.round(rgb[0]*t+(1-t)*255);d[p+1]=Math.round(rgb[1]*t+(1-t)*255);d[p+2]=Math.round(rgb[2]*t+(1-t)*255);
+    }
+    tmpctx.putImageData(id,0,0);
+    tctx.drawImage(tmp,dx,dy,dw,dh);
+  });
+}
 
 function renderPalette(){
   var c=document.getElementById('palette-swatches');c.innerHTML='';
@@ -449,7 +502,7 @@ function doRender(){
   wk.onmessage=function(e){
     var out=new Uint8ClampedArray(e.data.pixels);
     S.result=new ImageData(out,w,h);
-    drawResult();progressFill.style.width='100%';
+    drawResult();updateRisoThumbs();progressFill.style.width='100%';
     setTimeout(function(){progressBar.classList.remove('visible');progressFill.style.width='0%';},200);
     rendering=false;if(pendingRender){pendingRender=false;doRender();}
   };
