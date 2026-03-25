@@ -850,12 +850,14 @@ function bakeFrame(c, ctx) {
   if (frameStyle==='polaroid') {
     var fc = document.getElementById('fr-pol-color').value;
     var cap = document.getElementById('fr-pol-caption').value;
-    var bottomH = Math.max(48, fh*0.14);
-    var sideW = Math.max(10, fw*0.04);
-    var topH = Math.max(10, fh*0.04);
+    var bottomH = Math.max(60, fh*0.14);
+    var sideW = Math.max(14, fw*0.05);
+    var topH = Math.max(14, fh*0.05);
     ctx.fillStyle = fc;
-    ctx.fillRect(0,0,sideW,fh); ctx.fillRect(fw-sideW,0,sideW,fh);
-    ctx.fillRect(0,0,fw,topH);  ctx.fillRect(0,fh-bottomH,fw,bottomH);
+    ctx.fillRect(0, 0, fw, topH);           // top
+    ctx.fillRect(0, 0, sideW, fh);          // left
+    ctx.fillRect(fw-sideW, 0, sideW, fh);   // right
+    ctx.fillRect(0, fh-bottomH, fw, bottomH); // bottom
     if (cap) {
       var textColor = isLightColor(fc) ? '#444' : '#ddd';
       var fs = Math.round(bottomH*0.32);
@@ -867,8 +869,12 @@ function bakeFrame(c, ctx) {
     var bc = document.getElementById('fr-brd-color').value;
     var bw = parseInt(document.getElementById('fr-brd-width').value)||16;
     var scaled = Math.round(bw * fw/400);
-    ctx.strokeStyle=bc; ctx.lineWidth=scaled*2;
-    ctx.strokeRect(0,0,fw,fh);
+    // Fill border as solid rects (not strokeRect which gets clipped at edge)
+    ctx.fillStyle = bc;
+    ctx.fillRect(0, 0, fw, scaled);              // top
+    ctx.fillRect(0, fh-scaled, fw, scaled);      // bottom
+    ctx.fillRect(0, 0, scaled, fh);              // left
+    ctx.fillRect(fw-scaled, 0, scaled, fh);      // right
   }
 }
 
