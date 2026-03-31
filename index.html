@@ -177,6 +177,17 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
             <span style="color:var(--muted)">use image colors</span>
           </label>
         </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px">
+          <span style="color:var(--muted)">Animate</span>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="ascii-animate" style="accent-color:var(--accent)">
+            <span style="color:var(--muted)">on</span>
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px" id="ascii-speed-row" style="display:none">
+          <span style="color:var(--muted)">Speed</span>
+          <input type="range" id="ascii-speed" min="1" max="10" value="3" style="width:80px;accent-color:var(--accent)">
+        </div>
       </div>
       <div id="custom-pattern-ps" style="display:none;margin-top:10px">
         <div class="sl">Pattern <span style="font-size:9px;font-weight:400;color:var(--muted)">8&#215;8 · click to paint</span></div>
@@ -615,7 +626,12 @@ function getPalette(){
 }
 function doRender(){
   if(!S.srcImg)return;
-  if(S.algo==='ascii'){doAsciiRender();return;}
+  if(S.algo==='ascii'){
+    stopAsciiAnim();
+    if(document.getElementById('ascii-animate').checked){ startAsciiAnim(); }
+    else { doAsciiRender(); }
+    return;
+  }
   if(rendering){pendingRender=true;return;}
   rendering=true;progressBar.classList.add('visible');progressFill.style.width='20%';
   var pal=getPalette(),w=S.srcImg.width,h=S.srcImg.height;
@@ -672,7 +688,7 @@ function doHatchRender(img,cellSize,useColor){
       }
       var bright=(0.299*(sumR/cnt)+0.587*(sumG/cnt)+0.114*(sumB/cnt))/255;
       if(bright<0.04) continue;
-      var ang=Math.atan2(gy,gx); // gradient direction
+      var ang=Math.atan2(gy,gx) + asciiT; // gradient direction + animated rotation
       var hLen=(cellSize*0.46)*bright;
       var cx2=c*cellSize+cellSize/2, cy2=r*cellSize+cellSize/2;
       var lineCount=Math.ceil(bright*3);
@@ -695,6 +711,14 @@ function doHatchRender(img,cellSize,useColor){
 }
 
 // ── ASCII render (main thread, no worker) ──
+var asciiRaf = null, asciiT = 0, asciiAnimating = false;
+function stopAsciiAnim(){ if(asciiRaf){cancelAnimationFrame(asciiRaf);asciiRaf=null;} asciiAnimating=false; }
+function startAsciiAnim(){
+  asciiAnimating=true;
+  var speed=parseInt(document.getElementById('ascii-speed').value)||3;
+  function loop(){ asciiT+=speed*0.015; doAsciiRender(); asciiRaf=requestAnimationFrame(loop); }
+  asciiRaf=requestAnimationFrame(loop);
+}
 var ASCII_CHARSETS = {
   standard: ' .,:;i1tfLCG08@',
   dense:    ' `.-\':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@',
@@ -739,7 +763,8 @@ function doAsciiRender(){
       }
       var avgR=sumR/cnt,avgG=sumG/cnt,avgB=sumB/cnt;
       var bright=(0.299*avgR+0.587*avgG+0.114*avgB)/255;
-      var ci=Math.floor(bright*(chars.length-1));
+      var noise = asciiAnimating ? Math.sin(asciiT*2+c*0.3+r*0.5)*0.08 : 0;
+      var ci=Math.floor(Math.min(1,Math.max(0,bright+noise))*(chars.length-1));
       var ch2=chars[ci]||' ';
       if(useColor){
         mctx.fillStyle='rgb('+Math.round(avgR)+','+Math.round(avgG)+','+Math.round(avgB)+')';
@@ -844,7 +869,13 @@ function dl(url,name){var a=document.createElement('a');a.href=url;a.download=na
 
 // ASCII controls → re-render
 ['ascii-charset','ascii-color'].forEach(function(id){
-  document.getElementById(id).addEventListener('change',function(){if(S.algo==='ascii')scheduleRender();});
+  document.getElementById(id).addEventListener('change',function(){
+    if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
+  });
+});
+document.getElementById('ascii-animate').addEventListener('change',function(){
+  if(!this.checked){ stopAsciiAnim(); if(S.algo==='ascii') doAsciiRender(); }
+  else if(S.algo==='ascii' && S.srcImg){ stopAsciiAnim(); startAsciiAnim(); }
 });
 document.getElementById('ascii-size').addEventListener('input',function(){
   document.getElementById('ascii-size-val').textContent=this.value;
