@@ -146,6 +146,32 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         <button class="algo-btn" data-algo="bayer8">Bayer 8&times;8</button>
         <button class="algo-btn" data-algo="none">None</button>
         <button class="algo-btn" data-algo="custom">Custom ✏</button>
+        <button class="algo-btn" data-algo="ascii">ASCII</button>
+      </div>
+      <div id="ascii-options" style="display:none;margin-top:10px;padding:10px;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px">
+          <span style="color:var(--muted)">Cell size</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="range" id="ascii-size" min="4" max="24" value="10" step="1" style="width:90px;accent-color:var(--accent)">
+            <span id="ascii-size-val" style="color:var(--muted);width:24px">10</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px">
+          <span style="color:var(--muted)">Charset</span>
+          <select id="ascii-charset" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:11px">
+            <option value="standard">Standard</option>
+            <option value="dense">Dense</option>
+            <option value="blocks">Blocks ░▒▓</option>
+            <option value="minimal">Minimal</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px">
+          <span style="color:var(--muted)">Color</span>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="ascii-color" style="accent-color:var(--accent)">
+            <span style="color:var(--muted)">use image colors</span>
+          </label>
+        </div>
       </div>
       <div id="custom-pattern-ps" style="display:none;margin-top:10px">
         <div class="sl">Pattern <span style="font-size:9px;font-weight:400;color:var(--muted)">8&#215;8 · click to paint</span></div>
@@ -475,6 +501,7 @@ document.querySelectorAll('.algo-btn').forEach(function(btn){
     btn.classList.add('active');S.algo=btn.dataset.algo;
     document.getElementById('spread-row').style.display=(S.algo==='floyd'||S.algo==='atkinson')?'flex':'none';
     document.getElementById('custom-pattern-ps').style.display=(S.algo==='custom')?'block':'none';
+    document.getElementById('ascii-options').style.display=(S.algo==='ascii')?'block':'none';
     if(S.algo==='custom'){resetWorker();rendering=false;pendingRender=false;}
     scheduleRender();
   });
@@ -583,6 +610,7 @@ function getPalette(){
 }
 function doRender(){
   if(!S.srcImg)return;
+  if(S.algo==='ascii'){doAsciiRender();return;}
   if(rendering){pendingRender=true;return;}
   rendering=true;progressBar.classList.add('visible');progressFill.style.width='20%';
   var pal=getPalette(),w=S.srcImg.width,h=S.srcImg.height;
@@ -605,6 +633,57 @@ function doRender(){
     palette:pal,pixelSize:S.pixelSize,contrast:S.contrast,brightness:S.brightness,spread:S.spread,
     customPattern:S.algo==='custom'?Array.from(customPattern):null},[buf]);
 }
+// ── ASCII render (main thread, no worker) ──
+var ASCII_CHARSETS = {
+  standard: ' .,:;i1tfLCG08@',
+  dense:    ' `.-\':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@',
+  blocks:   ' ░▒▓█',
+  minimal:  ' .:+#@'
+};
+function doAsciiRender(){
+  var img=S.srcImg;
+  var cellSize=parseInt(document.getElementById('ascii-size').value)||10;
+  var charsetKey=document.getElementById('ascii-charset').value;
+  var useColor=document.getElementById('ascii-color').checked;
+  var chars=ASCII_CHARSETS[charsetKey]||ASCII_CHARSETS.standard;
+  var cols=Math.floor(img.width/cellSize);
+  var rows=Math.floor(img.height/cellSize);
+  var fontSize=cellSize*1.15;
+  var cw=mainCanvas.width=cols*cellSize;
+  var ch=mainCanvas.height=rows*cellSize;
+  var mctx=mainCanvas.getContext('2d');
+  mctx.fillStyle='#000';
+  mctx.fillRect(0,0,cw,ch);
+  mctx.font='bold '+fontSize+'px "Courier New",monospace';
+  mctx.textBaseline='top';
+  mctx.textAlign='left';
+  for(var r=0;r<rows;r++){
+    for(var c=0;c<cols;c++){
+      // sample avg brightness + color of cell
+      var sumR=0,sumG=0,sumB=0,cnt=0;
+      for(var py=0;py<cellSize;py++){
+        for(var px=0;px<cellSize;px++){
+          var ix=(r*cellSize+py)*img.width+(c*cellSize+px);
+          sumR+=img.data[ix*4];sumG+=img.data[ix*4+1];sumB+=img.data[ix*4+2];cnt++;
+        }
+      }
+      var avgR=sumR/cnt,avgG=sumG/cnt,avgB=sumB/cnt;
+      var bright=(0.299*avgR+0.587*avgG+0.114*avgB)/255;
+      var ci=Math.floor(bright*(chars.length-1));
+      var ch2=chars[ci]||' ';
+      if(useColor){
+        mctx.fillStyle='rgb('+Math.round(avgR)+','+Math.round(avgG)+','+Math.round(avgB)+')';
+      } else {
+        var v=Math.round(bright*255);
+        mctx.fillStyle='rgb('+v+','+v+','+v+')';
+      }
+      mctx.fillText(ch2,c*cellSize,r*cellSize);
+    }
+  }
+  S.result={width:cw,height:ch,_ascii:true};
+  applyZoom();
+}
+
 function drawResult(){
   if(!S.result)return;
   var w=S.result.width,h=S.result.height;
@@ -693,8 +772,18 @@ function h2rgb(h){h=h.replace('#','');return[parseInt(h.slice(0,2),16),parseInt(
 function rgb2h(r,g,b){return'#'+[r,g,b].map(function(v){return('0'+Math.round(v).toString(16)).slice(-2);}).join('');}
 function dl(url,name){var a=document.createElement('a');a.href=url;a.download=name;a.click();}
 
+// ASCII controls → re-render
+['ascii-charset','ascii-color'].forEach(function(id){
+  document.getElementById(id).addEventListener('change',function(){if(S.algo==='ascii')scheduleRender();});
+});
+document.getElementById('ascii-size').addEventListener('input',function(){
+  document.getElementById('ascii-size-val').textContent=this.value;
+  if(S.algo==='ascii')scheduleRender();
+});
+
 document.getElementById('btn-export-png').addEventListener('click',function(){
   if(!S.result)return;
+  if(S.result._ascii){dl(mainCanvas.toDataURL('image/png'),'ditherit-ascii.png');return;}
   var c=document.createElement('canvas');c.width=S.result.width;c.height=S.result.height;
   c.getContext('2d').putImageData(S.result,0,0);dl(c.toDataURL('image/png'),'ditherit.png');
 });
