@@ -163,6 +163,11 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
             <option value="dense">Dense</option>
             <option value="blocks">Blocks ░▒▓</option>
             <option value="minimal">Minimal</option>
+            <option value="shapes">Shapes ○◆★</option>
+            <option value="kanji">漢字</option>
+            <option value="katakana">カタカナ</option>
+            <option value="braille">Braille ⠿</option>
+            <option value="hatch">Hatch /\|—</option>
           </select>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px">
@@ -633,18 +638,83 @@ function doRender(){
     palette:pal,pixelSize:S.pixelSize,contrast:S.contrast,brightness:S.brightness,spread:S.spread,
     customPattern:S.algo==='custom'?Array.from(customPattern):null},[buf]);
 }
+// Hatch render: line direction follows image gradient
+function doHatchRender(img,cellSize,useColor){
+  var cols=Math.floor(img.width/cellSize);
+  var rows=Math.floor(img.height/cellSize);
+  var cw=mainCanvas.width=cols*cellSize;
+  var ch=mainCanvas.height=rows*cellSize;
+  var mctx=mainCanvas.getContext('2d');
+  mctx.fillStyle='#000'; mctx.fillRect(0,0,cw,ch);
+  mctx.lineCap='round';
+  for(var r=0;r<rows;r++){
+    for(var c=0;c<cols;c++){
+      var sumR=0,sumG=0,sumB=0,cnt=0;
+      var gx=0,gy=0;
+      for(var py=0;py<cellSize;py++){
+        for(var px=0;px<cellSize;px++){
+          var ix=((r*cellSize+py)*img.width+(c*cellSize+px))*4;
+          var v=(img.data[ix]*0.299+img.data[ix+1]*0.587+img.data[ix+2]*0.114);
+          sumR+=img.data[ix];sumG+=img.data[ix+1];sumB+=img.data[ix+2];cnt++;
+          // simple Sobel-like gradient accumulation
+          if(px>0&&py>0&&px<cellSize-1&&py<cellSize-1){
+            var ixR=((r*cellSize+py)*img.width+(c*cellSize+px+1))*4;
+            var ixL=((r*cellSize+py)*img.width+(c*cellSize+px-1))*4;
+            var ixD=((r*cellSize+py+1)*img.width+(c*cellSize+px))*4;
+            var ixU=((r*cellSize+py-1)*img.width+(c*cellSize+px))*4;
+            var vR=(img.data[ixR]*0.299+img.data[ixR+1]*0.587+img.data[ixR+2]*0.114);
+            var vL=(img.data[ixL]*0.299+img.data[ixL+1]*0.587+img.data[ixL+2]*0.114);
+            var vD=(img.data[ixD]*0.299+img.data[ixD+1]*0.587+img.data[ixD+2]*0.114);
+            var vU=(img.data[ixU]*0.299+img.data[ixU+1]*0.587+img.data[ixU+2]*0.114);
+            gx+=vR-vL; gy+=vD-vU;
+          }
+        }
+      }
+      var bright=(0.299*(sumR/cnt)+0.587*(sumG/cnt)+0.114*(sumB/cnt))/255;
+      if(bright<0.04) continue;
+      var ang=Math.atan2(gy,gx); // gradient direction
+      var hLen=(cellSize*0.46)*bright;
+      var cx2=c*cellSize+cellSize/2, cy2=r*cellSize+cellSize/2;
+      var lineCount=Math.ceil(bright*3);
+      if(useColor) mctx.strokeStyle='rgb('+Math.round(sumR/cnt)+','+Math.round(sumG/cnt)+','+Math.round(sumB/cnt)+')';
+      else { var v2=Math.round(bright*255); mctx.strokeStyle='rgb('+v2+','+v2+','+v2+')';}
+      mctx.lineWidth=Math.max(0.4, bright*1.2);
+      for(var li=0;li<lineCount;li++){
+        var offset=(li-(lineCount-1)/2)*(cellSize*0.28);
+        var perpX=Math.cos(ang+Math.PI/2)*offset;
+        var perpY=Math.sin(ang+Math.PI/2)*offset;
+        mctx.beginPath();
+        mctx.moveTo(cx2+perpX-Math.cos(ang)*hLen, cy2+perpY-Math.sin(ang)*hLen);
+        mctx.lineTo(cx2+perpX+Math.cos(ang)*hLen, cy2+perpY+Math.sin(ang)*hLen);
+        mctx.stroke();
+      }
+    }
+  }
+  S.result={width:cw,height:ch,_ascii:true};
+  applyZoom();
+}
+
 // ── ASCII render (main thread, no worker) ──
 var ASCII_CHARSETS = {
   standard: ' .,:;i1tfLCG08@',
   dense:    ' `.-\':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@',
   blocks:   ' ░▒▓█',
-  minimal:  ' .:+#@'
+  minimal:  ' .:+#@',
+  shapes:   ' ·∘○◎●◆◇★▲■',
+  kanji:    ' 一乙二人入八刀力十又口土士夕大女子寸小山川工己巾干弋弓心戈手文日月木水火田目示禾米糸耳肉自至臼舌色虫血行衣西',
+  katakana: 'ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ',
+  braille:  ' ⠁⠃⠇⠏⠟⠿⣿',
+  hatch:    null  // special: direction-based hatching
 };
 function doAsciiRender(){
   var img=S.srcImg;
   var cellSize=parseInt(document.getElementById('ascii-size').value)||10;
   var charsetKey=document.getElementById('ascii-charset').value;
   var useColor=document.getElementById('ascii-color').checked;
+
+  // special: hatch mode
+  if(charsetKey==='hatch'){doHatchRender(img,cellSize,useColor);return;}
+
   var chars=ASCII_CHARSETS[charsetKey]||ASCII_CHARSETS.standard;
   var cols=Math.floor(img.width/cellSize);
   var rows=Math.floor(img.height/cellSize);
