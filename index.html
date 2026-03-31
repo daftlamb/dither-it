@@ -178,6 +178,10 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
           </label>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px">
+          <span style="color:var(--muted)">Background</span>
+          <input type="color" id="ascii-bg" value="#000000" style="width:32px;height:20px;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:0">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px">
           <span style="color:var(--muted)">Animate</span>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
             <input type="checkbox" id="ascii-animate" style="accent-color:var(--accent)">
@@ -661,7 +665,7 @@ function doHatchRender(img,cellSize,useColor){
   var cw=mainCanvas.width=cols*cellSize;
   var ch=mainCanvas.height=rows*cellSize;
   var mctx=mainCanvas.getContext('2d');
-  mctx.fillStyle='#000'; mctx.fillRect(0,0,cw,ch);
+  mctx.fillStyle=document.getElementById('ascii-bg').value; mctx.fillRect(0,0,cw,ch);
   mctx.lineCap='round';
   for(var r=0;r<rows;r++){
     for(var c=0;c<cols;c++){
@@ -746,7 +750,7 @@ function doAsciiRender(){
   var cw=mainCanvas.width=cols*cellSize;
   var ch=mainCanvas.height=rows*cellSize;
   var mctx=mainCanvas.getContext('2d');
-  mctx.fillStyle='#000';
+  mctx.fillStyle=document.getElementById('ascii-bg').value;
   mctx.fillRect(0,0,cw,ch);
   mctx.font='bold '+fontSize+'px "Courier New",monospace';
   mctx.textBaseline='top';
@@ -868,7 +872,7 @@ function rgb2h(r,g,b){return'#'+[r,g,b].map(function(v){return('0'+Math.round(v)
 function dl(url,name){var a=document.createElement('a');a.href=url;a.download=name;a.click();}
 
 // ASCII controls → re-render
-['ascii-charset','ascii-color'].forEach(function(id){
+['ascii-charset','ascii-color','ascii-bg'].forEach(function(id){
   document.getElementById(id).addEventListener('change',function(){
     if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
   });
