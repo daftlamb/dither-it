@@ -714,86 +714,6 @@ function doHatchRender(img,cellSize,useColor){
   applyZoom();
 }
 
-// ── ASCII CRT/chromatic-aberration postprocess (WebGL) ──
-var _crtGL = null, _crtProg = null, _crtTex = null, _crtBuf = null, _crtCanvas = null;
-function _initCRT(w, h) {
-  if (!_crtCanvas) {
-    _crtCanvas = document.createElement('canvas');
-    _crtCanvas.style.display = 'none';
-  }
-  _crtCanvas.width = w; _crtCanvas.height = h;
-  if (!_crtGL) {
-    _crtGL = _crtCanvas.getContext('webgl') || _crtCanvas.getContext('experimental-webgl');
-    if (!_crtGL) return false;
-    var gl = _crtGL;
-    var vs = gl.createShader(gl.VERTEX_SHADER);
-    gl.shaderSource(vs, 'attribute vec2 a;varying vec2 v;void main(){v=a*.5+.5;gl_Position=vec4(a,0,1);}');
-    gl.compileShader(vs);
-    var fs = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(fs, [
-      'precision mediump float;',
-      'uniform sampler2D u;',
-      'uniform vec2 res;',
-      'uniform float t;',
-      'uniform float ca;',   // chromatic aberration strength
-      'uniform float scan;', // scanline intensity
-      'varying vec2 v;',
-      'float rand(vec2 co){return fract(sin(dot(co,vec2(12.9898,78.233)))*43758.5453);}',
-      'void main(){',
-      '  vec2 px=1.0/res;',
-      '  float off=ca*px.x;',
-      '  float r=texture2D(u,vec2(v.x+off,v.y)).r;',
-      '  float g=texture2D(u,v).g;',
-      '  float b=texture2D(u,vec2(v.x-off,v.y)).b;',
-      '  vec3 col=vec3(r,g,b);',
-      // scanline: dark bands scrolling downward
-      '  float line=mod(v.y*res.y+t*40.0,4.0);',
-      '  float s=1.0-scan*(1.0-smoothstep(0.0,1.0,line)*smoothstep(4.0,3.0,line));',
-      '  col*=s;',
-      // subtle noise flicker
-      '  col+=0.015*(rand(v+t)-0.5);',
-      '  gl_FragColor=vec4(col,1.0);',
-      '}'
-    ].join('\n'));
-    gl.compileShader(fs);
-    _crtProg = gl.createProgram();
-    gl.attachShader(_crtProg, vs); gl.attachShader(_crtProg, fs);
-    gl.linkProgram(_crtProg); gl.useProgram(_crtProg);
-    _crtBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, _crtBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
-    _crtTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, _crtTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  }
-  return true;
-}
-function applyCRTEffect(srcCanvas, t) {
-  var w = srcCanvas.width, h = srcCanvas.height;
-  if (!_initCRT(w, h)) return; // WebGL not available, skip
-  var gl = _crtGL;
-  gl.viewport(0, 0, w, h);
-  gl.bindTexture(gl.TEXTURE_2D, _crtTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, srcCanvas);
-  gl.useProgram(_crtProg);
-  var aLoc = gl.getAttribLocation(_crtProg, 'a');
-  gl.bindBuffer(gl.ARRAY_BUFFER, _crtBuf);
-  gl.enableVertexAttribArray(aLoc);
-  gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
-  gl.uniform1i(gl.getUniformLocation(_crtProg, 'u'), 0);
-  gl.uniform2f(gl.getUniformLocation(_crtProg, 'res'), w, h);
-  gl.uniform1f(gl.getUniformLocation(_crtProg, 't'), t);
-  gl.uniform1f(gl.getUniformLocation(_crtProg, 'ca'), 2.5);   // px chromatic aberration
-  gl.uniform1f(gl.getUniformLocation(_crtProg, 'scan'), 0.18); // scanline darkness
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  // write result back to srcCanvas
-  var ctx2d = srcCanvas.getContext('2d');
-  ctx2d.drawImage(_crtCanvas, 0, 0);
-}
-
 // ── ASCII render (main thread, no worker) ──
 var asciiRaf = null, asciiT = 0, asciiAnimating = false;
 function stopAsciiAnim(){ if(asciiRaf){cancelAnimationFrame(asciiRaf);asciiRaf=null;} asciiAnimating=false; }
@@ -847,7 +767,7 @@ function doAsciiRender(){
       }
       var avgR=sumR/cnt,avgG=sumG/cnt,avgB=sumB/cnt;
       var bright=(0.299*avgR+0.587*avgG+0.114*avgB)/255;
-      var noise = asciiAnimating ? (Math.sin(asciiT*2+c*0.3+r*0.5)*0.06 + (Math.random()-0.5)*0.05) : 0;
+      var noise = asciiAnimating ? Math.sin(asciiT*2+c*0.3+r*0.5)*0.08 : 0;
       var ci=Math.floor(Math.min(1,Math.max(0,bright+noise))*(chars.length-1));
       var ch2=chars[ci]||' ';
       if(useColor){
@@ -859,8 +779,6 @@ function doAsciiRender(){
       mctx.fillText(ch2,c*cellSize,r*cellSize);
     }
   }
-  // apply CRT/chromatic-aberration postprocess when animating
-  if (asciiAnimating) applyCRTEffect(mainCanvas, asciiT);
   S.result={width:cw,height:ch,_ascii:true};
   applyZoom();
 }
