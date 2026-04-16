@@ -152,7 +152,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px">
           <span style="color:var(--muted)">Cell size</span>
           <div style="display:flex;align-items:center;gap:6px">
-            <input type="range" id="ascii-size" min="4" max="24" value="10" step="1" style="width:90px;accent-color:var(--accent)">
+            <input type="range" id="ascii-size" min="4" max="64" value="10" step="1" style="width:90px;accent-color:var(--accent)">
             <span id="ascii-size-val" style="color:var(--muted);width:24px">10</span>
           </div>
         </div>
@@ -189,6 +189,13 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
               <option value="grid">Grid</option>
               <option value="dots">Dots</option>
             </select>
+          </div>
+        </div>
+        <div id="ascii-bg-spacing-row" style="display:none;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px">
+          <span style="color:var(--muted)">Spacing</span>
+          <div style="display:flex;align-items:center;gap:4px">
+            <input type="range" id="ascii-bg-spacing" min="4" max="40" value="12" step="2" style="width:80px;accent-color:var(--accent)">
+            <span id="ascii-bg-spacing-val" style="color:var(--muted);width:20px">12</span>
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px">
@@ -810,7 +817,7 @@ function doAsciiRender(){
     var lineColor=bgLum>0.5?'rgba(0,0,0,0.25)':'rgba(255,255,255,0.25)';
     mctx.strokeStyle=lineColor;
     mctx.lineWidth=1;
-    var gap=Math.max(cellSize*2,8);
+    var gap=parseInt(document.getElementById('ascii-bg-spacing').value)||12;
     if(bgPattern==='vlines'||bgPattern==='grid'){
       for(var x=0;x<cw;x+=gap){mctx.beginPath();mctx.moveTo(x,0);mctx.lineTo(x,ch);mctx.stroke();}
     }
@@ -957,6 +964,15 @@ document.getElementById('ascii-charset').addEventListener('change',function(){
   });
 });
 document.getElementById('ascii-custom-chars').addEventListener('input',function(){
+  if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
+});
+document.getElementById('ascii-bg-pattern').addEventListener('change',function(){
+  var show=this.value!=='solid';
+  document.getElementById('ascii-bg-spacing-row').style.display=show?'flex':'none';
+  if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
+});
+document.getElementById('ascii-bg-spacing').addEventListener('input',function(){
+  document.getElementById('ascii-bg-spacing-val').textContent=this.value;
   if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
 });
 ['ascii-charset','ascii-color','ascii-bg','ascii-bg-pattern'].forEach(function(id){
