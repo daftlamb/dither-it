@@ -6,7 +6,7 @@
 <title>Dither It</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&family=Noto+Sans+SC:wght@300;400&family=Space+Mono:wght@400;700&family=Share+Tech+Mono&family=Fira+Code:wght@400;700&family=Source+Code+Pro:wght@400;700&family=IBM+Plex+Mono:wght@400;700&family=Roboto+Mono:wght@400;700&family=Zen+Dots&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&family=Noto+Sans+SC:wght@300;400&family=Noto+Serif+SC:wght@300;400&family=Space+Mono:wght@400;700&family=Share+Tech+Mono&family=Fira+Code:wght@400;700&family=Source+Code+Pro:wght@400;700&family=IBM+Plex+Mono:wght@400;700&family=Roboto+Mono:wght@400;700&family=Zen+Dots&family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#f5f5f5;--surface:#fff;--header:#fafafa;--panel:#fff;--border:#e0e0e0;--text:#1a1a1a;--muted:#888;--accent:#39ff14;--accent2:#2bcc10;--ibg:#f0f0f0}
 [data-theme="dark"]{--bg:#141414;--surface:#1e1e1e;--header:#0e0e0e;--panel:#141414;--border:#2a2a2a;--text:#e8e8e8;--muted:#666;--accent:#39ff14;--accent2:#2bcc10;--ibg:#1e1e1e}
@@ -180,7 +180,16 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px">
           <span style="color:var(--muted)">Background</span>
-          <input type="color" id="ascii-bg" value="#000000" style="width:32px;height:20px;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:0">
+          <div style="display:flex;align-items:center;gap:4px">
+            <input type="color" id="ascii-bg" value="#000000" style="width:32px;height:20px;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:0">
+            <select id="ascii-bg-pattern" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11px">
+              <option value="solid">Solid</option>
+              <option value="vlines">| Lines</option>
+              <option value="hlines">— Lines</option>
+              <option value="grid">Grid</option>
+              <option value="dots">Dots</option>
+            </select>
+          </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:12px">
           <span style="color:var(--muted)">Animate</span>
@@ -210,9 +219,14 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
               <option value="'IBM Plex Mono',monospace">IBM Plex Mono</option>
               <option value="'Roboto Mono',monospace">Roboto Mono</option>
               <option value="'Noto Sans SC',sans-serif">Noto Sans SC</option>
+              <option value="'Noto Serif SC',serif">Noto Serif SC (思源宋体)</option>
               <option value="'Zen Dots',cursive">Zen Dots</option>
               <option value="'Press Start 2P',cursive">Press Start 2P</option>
             </select>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;font-size:12px">
+            <span style="color:var(--muted)">Color</span>
+            <input type="color" id="ascii-custom-color" value="#ffffff" style="width:32px;height:20px;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:0">
           </div>
         </div>
       </div>
@@ -768,10 +782,12 @@ function doAsciiRender(){
 
   var chars;
   var fontFamily='"Courier New",monospace';
+  var customColor=null;
   if(charsetKey==='custom'){
     var raw=document.getElementById('ascii-custom-chars').value;
     chars=raw.length>=2 ? raw : ' .:#@';
     fontFamily=document.getElementById('ascii-custom-font').value;
+    customColor=document.getElementById('ascii-custom-color').value;
   } else {
     chars=ASCII_CHARSETS[charsetKey]||ASCII_CHARSETS.standard;
   }
@@ -781,8 +797,27 @@ function doAsciiRender(){
   var cw=mainCanvas.width=cols*cellSize;
   var ch=mainCanvas.height=rows*cellSize;
   var mctx=mainCanvas.getContext('2d');
-  mctx.fillStyle=document.getElementById('ascii-bg').value;
+  var bgColor=document.getElementById('ascii-bg').value;
+  var bgPattern=document.getElementById('ascii-bg-pattern').value;
+  mctx.fillStyle=bgColor;
   mctx.fillRect(0,0,cw,ch);
+  if(bgPattern!=='solid'){
+    mctx.save();
+    mctx.strokeStyle='rgba(255,255,255,0.08)';
+    mctx.lineWidth=1;
+    var gap=cellSize;
+    if(bgPattern==='vlines'||bgPattern==='grid'){
+      for(var x=0;x<cw;x+=gap){mctx.beginPath();mctx.moveTo(x,0);mctx.lineTo(x,ch);mctx.stroke();}
+    }
+    if(bgPattern==='hlines'||bgPattern==='grid'){
+      for(var y=0;y<ch;y+=gap){mctx.beginPath();mctx.moveTo(0,y);mctx.lineTo(cw,y);mctx.stroke();}
+    }
+    if(bgPattern==='dots'){
+      mctx.fillStyle='rgba(255,255,255,0.12)';
+      for(var dx=0;dx<cw;dx+=gap){for(var dy=0;dy<ch;dy+=gap){mctx.beginPath();mctx.arc(dx,dy,1,0,Math.PI*2);mctx.fill();}}
+    }
+    mctx.restore();
+  }
   mctx.font='bold '+fontSize+'px '+fontFamily;
   mctx.textBaseline='top';
   mctx.textAlign='left';
@@ -801,7 +836,9 @@ function doAsciiRender(){
       var noise = asciiAnimating ? Math.sin(asciiT*2+c*0.3+r*0.5)*0.08 : 0;
       var ci=Math.floor(Math.min(1,Math.max(0,bright+noise))*(chars.length-1));
       var ch2=chars[ci]||' ';
-      if(useColor){
+      if(customColor){
+        mctx.fillStyle=customColor;
+      } else if(useColor){
         mctx.fillStyle='rgb('+Math.round(avgR)+','+Math.round(avgG)+','+Math.round(avgB)+')';
       } else {
         var v=Math.round(bright*255);
@@ -909,7 +946,7 @@ document.getElementById('ascii-charset').addEventListener('change',function(){
   document.getElementById('ascii-custom-row').style.display=isCustom?'block':'none';
   if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
 });
-['ascii-custom-chars','ascii-custom-font'].forEach(function(id){
+['ascii-custom-chars','ascii-custom-font','ascii-custom-color'].forEach(function(id){
   document.getElementById(id).addEventListener('change',function(){
     if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
   });
@@ -917,7 +954,7 @@ document.getElementById('ascii-charset').addEventListener('change',function(){
 document.getElementById('ascii-custom-chars').addEventListener('input',function(){
   if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
 });
-['ascii-charset','ascii-color','ascii-bg'].forEach(function(id){
+['ascii-charset','ascii-color','ascii-bg','ascii-bg-pattern'].forEach(function(id){
   document.getElementById(id).addEventListener('change',function(){
     if(S.algo==='ascii'){ stopAsciiAnim(); scheduleRender(); }
   });
