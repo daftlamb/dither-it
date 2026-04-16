@@ -398,18 +398,24 @@ var B4=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 var B8=[0,32,8,40,2,34,10,42,48,16,56,24,50,18,58,26,12,44,4,36,14,46,6,38,60,28,52,20,62,30,54,22,3,35,11,43,1,33,9,41,51,19,59,27,49,17,57,25,15,47,7,39,13,45,5,37,63,31,55,23,61,29,53,21];
 // quantize a single channel value to `levels` steps (e.g. 2 = 0/255, 4 = 0/85/170/255)
 function quantCh(v,levels){var step=255/(levels-1);return Math.round(Math.round(v/step)*step);}
+// photo mode: dither luminance, scale original RGB by quantized/original luma ratio
+function photoSnap(r,g,b,luma,qLuma){
+  var ratio=luma>0?qLuma/luma:0;
+  return [clamp(r*ratio,0,255),clamp(g*ratio,0,255),clamp(b*ratio,0,255)];
+}
 function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode,photoLevels){
-  var pLvl=photoLevels||2; // per-channel quantization levels for photo mode
-  // custom pattern: separate block, no variable conflicts
+  var pLvl=photoLevels||2;
+  // custom pattern
   if(algo==='custom'){
     var cpat=customPattern&&customPattern.length===64?customPattern:null;
     for(var cy=0;cy<h;cy++){for(var cx=0;cx<w;cx++){
       var cii=(cy*w+cx)*4;
       if(colorMode==='photo'){
         var ct=cpat?( cpat[(cy%8)*8+(cx%8)]?0.25:-0.25 ):0;
-        buf[cii  ]=quantCh(clamp(buf[cii  ]+ct*255,0,255),pLvl);
-        buf[cii+1]=quantCh(clamp(buf[cii+1]+ct*255,0,255),pLvl);
-        buf[cii+2]=quantCh(clamp(buf[cii+2]+ct*255,0,255),pLvl);
+        var luma=0.299*buf[cii]+0.587*buf[cii+1]+0.114*buf[cii+2];
+        var ql=quantCh(clamp(luma+ct*255,0,255),pLvl);
+        var rgb=photoSnap(buf[cii],buf[cii+1],buf[cii+2],luma,ql);
+        buf[cii]=rgb[0];buf[cii+1]=rgb[1];buf[cii+2]=rgb[2];
       } else {
         var ct=cpat?( cpat[(cy%8)*8+(cx%8)]?0.25:-0.25 ):0;
         var cr=Math.round(clamp(buf[cii  ]+ct*255,0,255));
@@ -425,11 +431,11 @@ function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode,photoLevels){
     for(var y=0;y<h;y++){for(var x=0;x<w;x++){
       var ii=(y*w+x)*4,t=mat[(y%sz)*sz+(x%sz)]/lv-0.5;
       if(colorMode==='photo'){
-        // per-channel bayer quantization: dither each channel independently
         var step=255/(pLvl-1);
-        buf[ii  ]=quantCh(clamp(buf[ii  ]+t*step,0,255),pLvl);
-        buf[ii+1]=quantCh(clamp(buf[ii+1]+t*step,0,255),pLvl);
-        buf[ii+2]=quantCh(clamp(buf[ii+2]+t*step,0,255),pLvl);
+        var luma=0.299*buf[ii]+0.587*buf[ii+1]+0.114*buf[ii+2];
+        var ql=quantCh(clamp(luma+t*step,0,255),pLvl);
+        var rgb=photoSnap(buf[ii],buf[ii+1],buf[ii+2],luma,ql);
+        buf[ii]=rgb[0];buf[ii+1]=rgb[1];buf[ii+2]=rgb[2];
       } else {
         var r=Math.round(clamp(buf[ii]+t*255,0,255)),g=Math.round(clamp(buf[ii+1]+t*255,0,255)),b=Math.round(clamp(buf[ii+2]+t*255,0,255));
         var ci=nearest(r,g,b,pal);buf[ii]=pal[ci][0];buf[ii+1]=pal[ci][1];buf[ii+2]=pal[ci][2];
@@ -438,23 +444,41 @@ function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode,photoLevels){
   }
   if(algo==='none'){
     if(colorMode==='photo'){
-      // per-channel quantization, no dithering
-      for(var i=0;i<w*h;i++){var si=i*4;buf[si]=quantCh(buf[si],pLvl);buf[si+1]=quantCh(buf[si+1],pLvl);buf[si+2]=quantCh(buf[si+2],pLvl);}
+      for(var i=0;i<w*h;i++){
+        var si=i*4;
+        var luma=0.299*buf[si]+0.587*buf[si+1]+0.114*buf[si+2];
+        var ql=quantCh(luma,pLvl);
+        var rgb=photoSnap(buf[si],buf[si+1],buf[si+2],luma,ql);
+        buf[si]=rgb[0];buf[si+1]=rgb[1];buf[si+2]=rgb[2];
+      }
     } else {
       for(var i=0;i<w*h;i++){var si=i*4,ci=nearest(buf[si],buf[si+1],buf[si+2],pal);buf[si]=pal[ci][0];buf[si+1]=pal[ci][1];buf[si+2]=pal[ci][2];}
     }
     return;
   }
   var isFlo=algo==='floyd';
+  // for photo mode, operate on a separate luma buffer for error diffusion
+  if(colorMode==='photo'){
+    var lbuf=new Float32Array(w*h);
+    for(var i=0;i<w*h;i++){var si=i*4;lbuf[i]=0.299*buf[si]+0.587*buf[si+1]+0.114*buf[si+2];}
+    for(var y=0;y<h;y++){for(var x=0;x<w;x++){
+      var i=y*w+x,ii=i*4,ol=lbuf[i];
+      var ql=quantCh(ol,pLvl);
+      var rgb=photoSnap(buf[ii],buf[ii+1],buf[ii+2],ol,ql);
+      buf[ii]=rgb[0];buf[ii+1]=rgb[1];buf[ii+2]=rgb[2];
+      var el=(ol-ql)*spread;
+      function ael(dx,dy,fr){
+        var nx=x+dx,ny=y+dy;if(nx<0||nx>=w||ny<0||ny>=h)return;
+        lbuf[ny*w+nx]=clamp(lbuf[ny*w+nx]+el*fr,0,255);
+      }
+      if(isFlo){ael(1,0,7/16);ael(-1,1,3/16);ael(0,1,5/16);ael(1,1,1/16);}
+      else{ael(1,0,1/8);ael(2,0,1/8);ael(-1,1,1/8);ael(0,1,1/8);ael(1,1,1/8);ael(0,2,1/8);}
+    }}
+    return;
+  }
   for(var y=0;y<h;y++){for(var x=0;x<w;x++){
     var ii=(y*w+x)*4,or=buf[ii],og=buf[ii+1],ob=buf[ii+2];
-    var nr,ng,nb;
-    if(colorMode==='photo'){
-      // per-channel error diffusion: quantize each channel independently
-      nr=quantCh(or,pLvl);ng=quantCh(og,pLvl);nb=quantCh(ob,pLvl);
-    } else {
-      var ci=nearest(or,og,ob,pal);nr=pal[ci][0];ng=pal[ci][1];nb=pal[ci][2];
-    }
+    var ci=nearest(or,og,ob,pal),nr=pal[ci][0],ng=pal[ci][1],nb=pal[ci][2];
     buf[ii]=nr;buf[ii+1]=ng;buf[ii+2]=nb;
     var er=(or-nr)*spread,eg=(og-ng)*spread,eb=(ob-nb)*spread;
     function ae(dx,dy,fr){
