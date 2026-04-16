@@ -218,7 +218,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
               <option value="'Source Code Pro',monospace">Source Code Pro</option>
               <option value="'IBM Plex Mono',monospace">IBM Plex Mono</option>
               <option value="'Roboto Mono',monospace">Roboto Mono</option>
-              <option value="'Noto Sans SC',sans-serif">Noto Sans SC</option>
+              <option value="'Noto Sans SC',sans-serif">Noto Sans SC (思源黑体)</option>
               <option value="'Noto Serif SC',serif">Noto Serif SC (思源宋体)</option>
               <option value="'Zen Dots',cursive">Zen Dots</option>
               <option value="'Press Start 2P',cursive">Press Start 2P</option>
@@ -803,9 +803,14 @@ function doAsciiRender(){
   mctx.fillRect(0,0,cw,ch);
   if(bgPattern!=='solid'){
     mctx.save();
-    mctx.strokeStyle='rgba(255,255,255,0.08)';
+    // compute contrasting line color based on bg luminance
+    var bgHex=bgColor.replace('#','');
+    var bgR=parseInt(bgHex.substr(0,2),16),bgG=parseInt(bgHex.substr(2,2),16),bgB=parseInt(bgHex.substr(4,2),16);
+    var bgLum=(0.299*bgR+0.587*bgG+0.114*bgB)/255;
+    var lineColor=bgLum>0.5?'rgba(0,0,0,0.25)':'rgba(255,255,255,0.25)';
+    mctx.strokeStyle=lineColor;
     mctx.lineWidth=1;
-    var gap=cellSize;
+    var gap=Math.max(cellSize*2,8);
     if(bgPattern==='vlines'||bgPattern==='grid'){
       for(var x=0;x<cw;x+=gap){mctx.beginPath();mctx.moveTo(x,0);mctx.lineTo(x,ch);mctx.stroke();}
     }
@@ -813,8 +818,8 @@ function doAsciiRender(){
       for(var y=0;y<ch;y+=gap){mctx.beginPath();mctx.moveTo(0,y);mctx.lineTo(cw,y);mctx.stroke();}
     }
     if(bgPattern==='dots'){
-      mctx.fillStyle='rgba(255,255,255,0.12)';
-      for(var dx=0;dx<cw;dx+=gap){for(var dy=0;dy<ch;dy+=gap){mctx.beginPath();mctx.arc(dx,dy,1,0,Math.PI*2);mctx.fill();}}
+      mctx.fillStyle=lineColor;
+      for(var dx=gap/2;dx<cw;dx+=gap){for(var dy=gap/2;dy<ch;dy+=gap){mctx.beginPath();mctx.arc(dx,dy,1.5,0,Math.PI*2);mctx.fill();}}
     }
     mctx.restore();
   }
