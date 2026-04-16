@@ -271,6 +271,14 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
         <div class="riso-list" id="riso-list"></div>
         <div style="font-size:10px;color:var(--muted);margin-top:8px">Select 2&ndash;3 colors</div>
       </div>
+      <div class="color-sub" id="sub-photo">
+        <div class="gray-levels">
+          <button class="photo-lvl active" data-lvl="2">2 lvls</button>
+          <button class="photo-lvl" data-lvl="4">4</button>
+          <button class="photo-lvl" data-lvl="8">8</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">Color levels per channel</div>
+      </div>
     </div>
     <div class="ps">
       <div class="sl">Parameters</div>
@@ -360,7 +368,7 @@ const RISO_COLORS=[
   {name:'Sunflower',hex:'#ffe800'},
   {name:'Fluorescent Orange',hex:'#ff6c2f'},
 ];
-const S={srcImg:null,result:null,algo:'floyd',colorMode:'bw',grayLevels:4,
+const S={srcImg:null,result:null,algo:'floyd',colorMode:'bw',grayLevels:4,photoLevels:2,
   customPalette:['#000000','#ffffff'],risoSel:[],pixelSize:1,contrast:0,
   brightness:0,spread:1.0,zoom:'fit',compareMode:false,splitFrac:0.5,pendingExport:null};
 var customPattern=new Uint8Array(64); // 8x8 grid, 0=off 1=on
@@ -388,14 +396,21 @@ function nearest(r,g,b,pal){
 }
 var B4=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
 var B8=[0,32,8,40,2,34,10,42,48,16,56,24,50,18,58,26,12,44,4,36,14,46,6,38,60,28,52,20,62,30,54,22,3,35,11,43,1,33,9,41,51,19,59,27,49,17,57,25,15,47,7,39,13,45,5,37,63,31,55,23,61,29,53,21];
-function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode){
-    // custom pattern: separate block, no variable conflicts
+// quantize a single channel value to `levels` steps (e.g. 2 = 0/255, 4 = 0/85/170/255)
+function quantCh(v,levels){var step=255/(levels-1);return Math.round(Math.round(v/step)*step);}
+function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode,photoLevels){
+  var pLvl=photoLevels||2; // per-channel quantization levels for photo mode
+  // custom pattern: separate block, no variable conflicts
   if(algo==='custom'){
     var cpat=customPattern&&customPattern.length===64?customPattern:null;
     for(var cy=0;cy<h;cy++){for(var cx=0;cx<w;cx++){
       var cii=(cy*w+cx)*4;
-      if(colorMode==='photo'){/* keep original color, no palette snap */}
-      else{
+      if(colorMode==='photo'){
+        var ct=cpat?( cpat[(cy%8)*8+(cx%8)]?0.25:-0.25 ):0;
+        buf[cii  ]=quantCh(clamp(buf[cii  ]+ct*255,0,255),pLvl);
+        buf[cii+1]=quantCh(clamp(buf[cii+1]+ct*255,0,255),pLvl);
+        buf[cii+2]=quantCh(clamp(buf[cii+2]+ct*255,0,255),pLvl);
+      } else {
         var ct=cpat?( cpat[(cy%8)*8+(cx%8)]?0.25:-0.25 ):0;
         var cr=Math.round(clamp(buf[cii  ]+ct*255,0,255));
         var cg=Math.round(clamp(buf[cii+1]+ct*255,0,255));
@@ -410,8 +425,11 @@ function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode){
     for(var y=0;y<h;y++){for(var x=0;x<w;x++){
       var ii=(y*w+x)*4,t=mat[(y%sz)*sz+(x%sz)]/lv-0.5;
       if(colorMode==='photo'){
-        // apply bayer threshold per channel to preserve original hue
-        buf[ii]=clamp(buf[ii]+t*255,0,255);buf[ii+1]=clamp(buf[ii+1]+t*255,0,255);buf[ii+2]=clamp(buf[ii+2]+t*255,0,255);
+        // per-channel bayer quantization: dither each channel independently
+        var step=255/(pLvl-1);
+        buf[ii  ]=quantCh(clamp(buf[ii  ]+t*step,0,255),pLvl);
+        buf[ii+1]=quantCh(clamp(buf[ii+1]+t*step,0,255),pLvl);
+        buf[ii+2]=quantCh(clamp(buf[ii+2]+t*step,0,255),pLvl);
       } else {
         var r=Math.round(clamp(buf[ii]+t*255,0,255)),g=Math.round(clamp(buf[ii+1]+t*255,0,255)),b=Math.round(clamp(buf[ii+2]+t*255,0,255));
         var ci=nearest(r,g,b,pal);buf[ii]=pal[ci][0];buf[ii+1]=pal[ci][1];buf[ii+2]=pal[ci][2];
@@ -419,7 +437,10 @@ function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode){
     }}return;
   }
   if(algo==='none'){
-    if(colorMode!=='photo'){
+    if(colorMode==='photo'){
+      // per-channel quantization, no dithering
+      for(var i=0;i<w*h;i++){var si=i*4;buf[si]=quantCh(buf[si],pLvl);buf[si+1]=quantCh(buf[si+1],pLvl);buf[si+2]=quantCh(buf[si+2],pLvl);}
+    } else {
       for(var i=0;i<w*h;i++){var si=i*4,ci=nearest(buf[si],buf[si+1],buf[si+2],pal);buf[si]=pal[ci][0];buf[si+1]=pal[ci][1];buf[si+2]=pal[ci][2];}
     }
     return;
@@ -428,8 +449,12 @@ function doDither(buf,w,h,algo,pal,spread,customPattern,colorMode){
   for(var y=0;y<h;y++){for(var x=0;x<w;x++){
     var ii=(y*w+x)*4,or=buf[ii],og=buf[ii+1],ob=buf[ii+2];
     var nr,ng,nb;
-    if(colorMode==='photo'){nr=or;ng=og;nb=ob;}
-    else{var ci=nearest(or,og,ob,pal);nr=pal[ci][0];ng=pal[ci][1];nb=pal[ci][2];}
+    if(colorMode==='photo'){
+      // per-channel error diffusion: quantize each channel independently
+      nr=quantCh(or,pLvl);ng=quantCh(og,pLvl);nb=quantCh(ob,pLvl);
+    } else {
+      var ci=nearest(or,og,ob,pal);nr=pal[ci][0];ng=pal[ci][1];nb=pal[ci][2];
+    }
     buf[ii]=nr;buf[ii+1]=ng;buf[ii+2]=nb;
     var er=(or-nr)*spread,eg=(og-ng)*spread,eb=(ob-nb)*spread;
     function ae(dx,dy,fr){
@@ -454,7 +479,7 @@ self.onmessage=function(e){
     var si=(sy*sw+sx)*4;small[si]=r/cnt;small[si+1]=g/cnt;small[si+2]=b/cnt;small[si+3]=255;
   }}
   var pal=buildPal(d.colorMode,d.grayLevels,d.palette);
-  doDither(small,sw,sh,d.algo,pal,d.spread,d.customPattern,d.colorMode);
+  doDither(small,sw,sh,d.algo,pal,d.spread,d.customPattern,d.colorMode,d.photoLevels);
   var out=new Uint8ClampedArray(w*h*4);
   for(var y=0;y<h;y++){for(var x=0;x<w;x++){
     var sx=Math.min(Math.floor(x/ps),sw-1),sy=Math.min(Math.floor(y/ps),sh-1);
@@ -590,7 +615,7 @@ document.querySelectorAll('.cm-tab').forEach(function(tab){
     document.querySelectorAll('.cm-tab').forEach(function(t){t.classList.remove('active');});
     tab.classList.add('active');S.colorMode=tab.dataset.mode;
     document.querySelectorAll('.color-sub').forEach(function(s){s.classList.remove('visible');});
-    var subs={gray:'sub-gray',custom:'sub-custom',riso:'sub-riso'};
+    var subs={gray:'sub-gray',custom:'sub-custom',riso:'sub-riso',photo:'sub-photo'};
     if(subs[S.colorMode])document.getElementById(subs[S.colorMode]).classList.add('visible');
     scheduleRender();
   });
@@ -600,6 +625,12 @@ document.querySelectorAll('.gray-lvl').forEach(function(btn){
   btn.addEventListener('click',function(){
     document.querySelectorAll('.gray-lvl').forEach(function(b){b.classList.remove('active');});
     btn.classList.add('active');S.grayLevels=parseInt(btn.dataset.lvl);scheduleRender();
+  });
+});
+document.querySelectorAll('.photo-lvl').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.photo-lvl').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');S.photoLevels=parseInt(btn.dataset.lvl);scheduleRender();
   });
 });
 
@@ -714,6 +745,7 @@ function doRender(){
   };
   wk.postMessage({pixels:buf,width:w,height:h,algo:S.algo,colorMode:S.colorMode,grayLevels:S.grayLevels,
     palette:pal,pixelSize:S.pixelSize,contrast:S.contrast,brightness:S.brightness,spread:S.spread,
+    photoLevels:S.photoLevels,
     customPattern:S.algo==='custom'?Array.from(customPattern):null},[buf]);
 }
 // Hatch render: line direction follows image gradient
