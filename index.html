@@ -375,6 +375,7 @@ function applyBC(d,br,co){
   }
 }
 function buildPal(cm,gl,pal){
+  if(cm==='photo')return[];
   if(cm==='bw')return[[0,0,0],[255,255,255]];
   if(cm==='gray'){var p=[];for(var i=0;i<gl;i++){var v=Math.round(i*255/(gl-1));p.push([v,v,v]);}return p;}
   return pal.map(function(h){return hexToRgb(h);});
@@ -415,7 +416,7 @@ function doDither(buf,w,h,algo,pal,spread,customPattern){
   var isFlo=algo==='floyd';
   for(var y=0;y<h;y++){for(var x=0;x<w;x++){
     var ii=(y*w+x)*4,or=buf[ii],og=buf[ii+1],ob=buf[ii+2];
-    var ci=nearest(or,og,ob,pal),nr=pal[ci][0],ng=pal[ci][1],nb=pal[ci][2];
+    var nr,ng,nb;if(cm==='photo'){nr=or;ng=og;nb=ob;}else{var ci=nearest(or,og,ob,pal);nr=pal[ci][0];ng=pal[ci][1];nb=pal[ci][2];}
     buf[ii]=nr;buf[ii+1]=ng;buf[ii+2]=nb;
     var er=(or-nr)*spread,eg=(og-ng)*spread,eb=(ob-nb)*spread;
     function ae(dx,dy,fr){
