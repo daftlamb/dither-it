@@ -1086,7 +1086,7 @@ function doSVG(){
   svg+='</svg>';
   dl(URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),'ditherit.svg');
 }
-document.getElementById('btn-export-riso').addEventListener('click',function(){
+document.getElementById('btn-export-riso')&&document.getElementById('btn-export-riso').addEventListener('click',function(){
   if(!S.result)return;
   if(S.colorMode!=='riso'||!S.risoSel.length){alert('Switch to Riso color mode and select 2-3 colors first.');return;}
   showDownloadModal(doRiso);
