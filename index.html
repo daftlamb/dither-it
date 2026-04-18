@@ -1065,10 +1065,18 @@ document.getElementById('btn-export-png').addEventListener('click',function(){
   var c=document.createElement('canvas');c.width=S.result.width;c.height=S.result.height;
   c.getContext('2d').putImageData(S.result,0,0);dl(c.toDataURL('image/png'),'ditherit.png');
 });
-document.getElementById('btn-export-svg').addEventListener('click',function(){if(!S.result)return;showDownloadModal(doSVG);});
+document.getElementById('btn-export-svg').addEventListener('click',function(){if(!S.result){alert('Please process an image first before exporting SVG.');return;}showDownloadModal(doSVG);});
 function doSVG(){
   if(!S.result)return;
-  var data=S.result.data,W=S.result.width,H=S.result.height,ps=S.pixelSize;
+  if(S.result._ascii){
+    var dataUrl=mainCanvas.toDataURL('image/png');
+    var W=mainCanvas.width,H=mainCanvas.height;
+    var svg='<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'"><image href="'+dataUrl+'" width="'+W+'" height="'+H+'"/></svg>';
+    dl(URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),'ditherit-ascii.svg');
+    return;
+  }
+  if(!S.result.data){alert('No image data available for SVG export. Please process an image first.');return;}
+  var data=S.result.data,W=S.result.width,H=S.result.height,ps=Math.max(1,S.pixelSize||1);
   var sw=Math.ceil(W/ps),sh=Math.ceil(H/ps);
   if(sw*sh>100000&&!confirm('This will generate '+sw*sh+' SVG rects. Continue?'))return;
   var groups={};
